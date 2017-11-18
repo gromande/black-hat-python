@@ -59,7 +59,7 @@ def main():
         elif opt in ("-l", "--listen"):
             listen = True
         elif opt in ("-e", "--execute"):
-            execute = arg
+            execute = str(arg)
         elif opt in ("-c", "--command"):
             command = True
         elif opt in ("-u", "--upload"):
@@ -83,6 +83,8 @@ def main():
     elif listen:
         #we are going to listen and potentially do other things
         server_loop()
+    else:
+        assert False, "Invalid command"
 
 def client_sender(buffer):
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -92,7 +94,7 @@ def client_sender(buffer):
         client.connect((target, port))
 
         if len(buffer):
-            client.send(buffer)
+            client.send(buffer.encode())
 
         while True:
             #now wait for data from target
@@ -102,20 +104,21 @@ def client_sender(buffer):
             while recv_len:
                 data = client.recv(4096)
                 recv_len = len(data)
-                response += data
+                response += data.decode()
 
                 if recv_len < 4096:
                     break
 
-            print("Response received: ", response)
+            #print("Response received: ", response)
+            print(response)
 
             #wait for more input
-            buffer = raw_input("")
+            buffer = input("")
             buffer += "\n"
 
-            client.send(buffer)
-    except:
-        print("[*] Exception sending data")
+            client.send(buffer.encode())
+    except Exception as e:
+        print("[*] Exception sending data: %s" % str(e))
     finally:
         client.close()
 
@@ -145,10 +148,11 @@ def run_command(command):
 
     #run the command and get the output back
     try:
-        output = subprocess.check_output(command, stderr=subprocess,
-                                         STDOUT, shell=True)
-    except:
-        output = "Failed to execute command: %s\r\n" % command
+        output = subprocess.check_output(command, stderr=subprocess.STDOUT,
+                                         shell=True)
+    except Exception as e:
+        output = "Failed to execute command: %s. Exception: %s\r\n" % \
+            (command, str(e))
 
     #send output back to client
     return output
@@ -170,20 +174,20 @@ def client_handler(client_socket):
             if not data:
                 break
             else:
-                file_buffer += data
+                file_buffer += data.decode()
 
         #now we take this bytes and try to write them out
         try:
             file_descriptor = open(upload_dest, "wb")
             file_descriptor.write(file_buffer)
-            file_descriptorclose()
+            file_descriptor.close()
 
             #Acknowledge that we wrote the file out
             client_socket.send("Successfully saved file to %s\r\n" %
                                upload_dest)
-        except:
-            client.socket.send("Failed to save file to %s\r\n" %
-                               upload_dest)
+        except Exception as e:
+            client.socket.send("Failed to save file to %s: %s\r\n" %
+                               (upload_dest, str(e)))
 
     #check for command execution
     if len(execute):
@@ -195,12 +199,12 @@ def client_handler(client_socket):
     if command:
         while True:
             #show a simple prompt
-            client_socket.send("<BHP:#> ")
+            client_socket.send("<BHP:#> ".encode())
 
             #now we receive until we see a linefeed
             cmd_buffer = ""
             while "\n" not in cmd_buffer:
-                cmd_buffer += client_socket.recv(1024)
+                cmd_buffer += client_socket.recv(1024).decode()
 
             #send back the command output
             response = run_command(cmd_buffer)
