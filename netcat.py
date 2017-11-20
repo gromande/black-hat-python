@@ -26,8 +26,8 @@ def usage():
     print("\n")
     print("Example: ")
     print("netcat.py -t 192.168.0.1 -p 5555 -l -c")
-    print("netcat.py -t 192.168.0.1 -p 5555 -l -u=c:\\target.exe")
-    print("netcat.py -t 192.168.0.1 -p 5555 -l -e=\"cat /etc/passwd\"")
+    print("netcat.py -t 192.168.0.1 -p 5555 -l -u c:\\target.exe")
+    print("netcat.py -t 192.168.0.1 -p 5555 -l -e \"cat /etc/passwd\"")
     print("echo 'ABCDEFGHI' | ./netcat.py -t 192.168.0.1 -p 5555")
     sys.exit(0)
 
@@ -94,6 +94,7 @@ def client_sender(buffer):
         client.connect((target, port))
 
         if len(buffer):
+            print("Debug-> sending initial data: " + str(buffer))
             client.send(buffer.encode())
 
         while True:
@@ -102,20 +103,23 @@ def client_sender(buffer):
             response = ""
 
             while recv_len:
+                print("Debug-> reading data")
                 data = client.recv(4096)
                 recv_len = len(data)
                 response += data.decode()
+                print("Debug-> data received. Length: " + str(recv_len))
 
                 if recv_len < 4096:
                     break
 
-            #print("Response received: ", response)
-            print(response)
+            print("Response received: ", response)
 
             #wait for more input
+            print("Degug-> asking for more input")
             buffer = input("")
             buffer += "\n"
 
+            print("Debug-> sending new input: " + str(buffer))
             client.send(buffer.encode())
     except Exception as e:
         print("[*] Exception sending data: %s" % str(e))
@@ -143,6 +147,7 @@ def server_loop():
         client_thread.start()
 
 def run_command(command):
+    print("Debug-> running command: " + str(command))
     #trim the newline
     command = command.rstrip()
 
@@ -158,23 +163,28 @@ def run_command(command):
     return output
 
 def client_handler(client_socket):
+    print("Debug-> handling client connection")
     global upload
     global execute
     global command
 
     #check for upload
     if len(upload_dest):
+        print("Debug-> client wants to upload file")
         #read in all the bytes an upload to destination
         file_buffer = ""
 
         #keep reading data until none is available
-        while True:
-            data = client_socket.recv(1024)
+        #while True:
+        #    data = client_socket.recv(1024)
+        #
+        #    print("Debug-> read data: %s" % (data))
+        #    if not data:
+        #        break
+        #    else:
+        #        file_buffer += data.decode()
 
-            if not data:
-                break
-            else:
-                file_buffer += data.decode()
+        file_buffer = client_socket.recv(1024)
 
         #now we take this bytes and try to write them out
         try:
@@ -183,23 +193,32 @@ def client_handler(client_socket):
             file_descriptor.close()
 
             #Acknowledge that we wrote the file out
-            client_socket.send("Successfully saved file to %s\r\n" %
-                               upload_dest)
+            msg = "Successfully saved file to %s\r\n" % upload_dest
+            client_socket.send(msg.encode())
         except Exception as e:
-            client.socket.send("Failed to save file to %s: %s\r\n" %
-                               (upload_dest, str(e)))
+            msg = "Failed to save file to %s: %s\r\n" % (upload_dest, str(e))
+            client_socket.send(msg.encode())
 
     #check for command execution
     if len(execute):
+        print("Debug-> client wants to execute command")
         #run the command
         output = run_command(execute)
+
+        #Error output can be a string or bytes
         client_socket.send(output)
 
     #now we check if a shell was requested
     if command:
+        print("Debug-> client want to execute shell")
+        #show a simple prompt
+        client_socket.send("<BHP:#> ".encode())
+
         while True:
             #show a simple prompt
-            client_socket.send("<BHP:#> ".encode())
+            #ERROR: sending prompt every time causes weird issues
+            #print("Debug-> sending prompt")
+            #client_socket.send("<BHP:#> ".encode())
 
             #now we receive until we see a linefeed
             cmd_buffer = ""
@@ -208,5 +227,6 @@ def client_handler(client_socket):
 
             #send back the command output
             response = run_command(cmd_buffer)
+            print("Debug-> sending back command response: " + str(response))
             client_socket.send(response)
 main()
