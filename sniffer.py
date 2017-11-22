@@ -44,6 +44,22 @@ class IP(Structure):
             self.protocol = str(self.protocol_num)
 
 
+class ICMP(Structure):
+
+    _fields_ = [
+        ("type",        c_ubyte),
+        ("code",        c_ubyte),
+        ("checksum",    c_ushort),
+        ("unused",      c_ushort),
+        ("next_hop_mtu",c_ushort)
+    ]
+
+    def __new__(self, socket_buffer):
+        return self.from_buffer_copy(socket_buffer)
+
+    def __init__(self, socket_buffer):
+        pass
+
 #create a raw socket an bind it to the public interface
 sniffer = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
 
@@ -61,5 +77,16 @@ try:
 
         print("Protocol: %s %s -> %s" % (ip_header.protocol, ip_header.src_address,
                                      ip_header.dst_address))
+
+        if ip_header.protocol == "ICMP":
+
+            #calculate where our ICMP packet starts
+            offset = ip_header.ihl * 4
+            icmp_buffer = raw_buffer[offset:offset + sizeof(ICMP)]
+
+            #create our ICMP structure
+            icmp_header = ICMP(icmp_buffer)
+
+            print("ICMP -> Type: %d Code: %d" % (icmp_header.type, icmp_header.code))
 except KeyboardInterrupt:
     pass
